@@ -157,3 +157,97 @@ http://localhost:9000/api
 nohup python frontend.py &
 visit http://localhost:8081/
 
+
+############### docker depoly
+
+## doc 
+https://zipkin.io/pages/quickstart.html
+https://github.com/openzipkin-attic/docker-zipkin/blob/master/docker-compose.yml
+
+## images
+docker pull openzipkin/zipkin
+docker pull elasticsearch:7.6.2
+
+## net prepare
+docker network create --subnet=172.18.2.0/24 docker-ice
+
+## es prepare
+
+mkdir -p 777 /data/elasticsearch/data
+chmod -R 777 /data/elasticsearch/data
+
+vi /data/elasticsearch/elasticsearch.yml
+
+cluster.name: "docker-cluster"
+network.host: 0.0.0.0
+xpack.security.enabled: true
+
+
+docker run -d \
+    --user root \
+    -p 9200:9200 \
+    -p 9300:9300 \
+    -m 2048m \
+    --cpus 2 \
+    --net docker-ice \
+    --ip 172.18.2.2 \
+    --log-driver json-file \
+    --log-opt max-size=10m \
+    --log-opt max-file=3 \
+    --name zipkin-es \
+    --restart=always \
+    -e "discovery.type=single-node" \
+    -v /data/elasticsearch/data:/usr/share/elasticsearch/data \
+    -v /data/elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml \
+    elasticsearch:7.6.2
+
+#set es pass
+docker exec -it zipkin-es /bin/bash
+cd bin
+elasticsearch-setup-passwords interactive
+elastic
+Muyed4gq2RE7wgNQ
+
+docker restart zipkin-es
+
+
+## start zipkin
+
+docker run -d \
+    --user root \
+    -p 9411:9411 \
+    -m 2048m \
+    --cpus 2 \
+    --net docker-ice \
+    --ip 172.18.2.3 \
+    --name zipkin \
+    --restart=always \
+    -e "STORAGE_TYPE=elasticsearch" \
+    -e "ES_HOSTS=172.18.2.2" \
+    -e "ES_USERNAME=elastic" \
+    -e "ES_PASSWORD=Muyed4gq2RE7wgNQ" \
+    openzipkin/zipkin
+
+
+## client test
+
+https://zipkin.io/pages/tracers_instrumentation.html
+
+
+## zipkin 使用规范
+
+   serviceName
+   spanName
+   api_rule: /api/[sfa-content]/[sub_function]/[get|put|update...]
+## zipkin es index 管理: 数据备份时长
+## zipkin monitor
+
+
+
+
+
+
+
+
+
+
