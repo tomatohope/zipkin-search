@@ -164,9 +164,12 @@ visit http://localhost:8081/
 https://zipkin.io/pages/quickstart.html
 https://github.com/openzipkin-attic/docker-zipkin/blob/master/docker-compose.yml
 
+## arch
+repoter -------> transport (http)-------> zipkin -------> db(es)
 ## images
 docker pull openzipkin/zipkin
-docker pull elasticsearch:7.6.2
+docker pull docker.elastic.co/elasticsearch/elasticsearch:7.9.2
+docker pull docker.elastic.co/kibana/kibana:7.9.2
 
 ## net prepare
 docker network create --subnet=172.18.2.0/24 docker-ice
@@ -175,6 +178,8 @@ docker network create --subnet=172.18.2.0/24 docker-ice
 
 mkdir -p 777 /data/elasticsearch/data
 chmod -R 777 /data/elasticsearch/data
+mkdir -p 777 /data/docker/kibana/{plugin,data}
+chmod -R 777 /data/docker/kibana
 
 vi /data/elasticsearch/elasticsearch.yml
 
@@ -199,7 +204,7 @@ docker run -d \
     -e "discovery.type=single-node" \
     -v /data/elasticsearch/data:/usr/share/elasticsearch/data \
     -v /data/elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml \
-    elasticsearch:7.6.2
+    docker.elastic.co/elasticsearch/elasticsearch:7.9.2
 
 #set es pass
 docker exec -it zipkin-es /bin/bash
@@ -236,18 +241,53 @@ https://zipkin.io/pages/tracers_instrumentation.html
 
 ## zipkin 使用规范
 
-   serviceName
-   spanName
-   api_rule: /api/[sfa-content]/[sub_function]/[get|put|update...]
-## zipkin es index 管理: 数据备份时长
-## zipkin monitor
+   serviceName: 使用 zipkin 的客户端名； 接口名 api_rule: /api/[sfa-content]/[sub_function]/[get|put|update...]
+   spanName: 完成整个请求中的单个处理单元
+   
+## zipkin es index 管理: 数据备份时长: index 按天索引，可定期清理
+## zipkin monitor https://zipkin.io/zipkin-api/#/default/post_spans
+curl -X GET "http://localhost:9411/api/v2/services" -H  "accept: application/json"
+# check status code
+import requests
+"""
+https://zipkin.io/zipkin-api/#/default/get_services
+
+"""
+
+url = "http://47.245.53.23:9411/api/v2/services"
+
+payload = {}
+headers = {
+  'Content-Type': 'application/json'
+}
+
+response = requests.request("GET", url, headers=headers, data=payload).status_code
+print(response)
+# print(response.text.encode('utf8'))
+
+## zipkin 结合 grafana 数据可视化 统计调用 api 的 error_code 数量
 
 
+## kibana
 
-
-
-
-
-
-
-
+docker run -d \
+    -p 0.0.0.0:5601:5601 \
+    --log-driver json-file \
+    --log-opt max-size=10m \
+    --log-opt max-file=3 \
+    --name kibana \
+    --restart=always \
+    --net docker-ice \
+    -e "max-old-space-size=1024" \
+    -e "SERVER_NAME=kibana" \
+    -e "ELASTICSEARCH_HOSTS=http://172.18.2.2:9200" \
+    -e "SERVER_HOST=0.0.0.0" \
+    -e "ELASTICSEARCH_USERNAME=kibana" \
+    -e "ELASTICSEARCH_PASSWORD=Muyed4gq2RE7wgNQ" \
+    -e "xpack.security.encryptionKey=something_at_least_32_characters" \
+    -v /data/docker/kibana/plugin:/usr/share/kibana/plugins/ \
+    -v /data/docker/kibana/data:/usr/share/kibana/data/ \
+    -v /etc/localtime:/etc/localtime:ro \
+    -m 3048m \
+    --cpus 2 \
+    docker.elastic.co/kibana/kibana:7.9.2
